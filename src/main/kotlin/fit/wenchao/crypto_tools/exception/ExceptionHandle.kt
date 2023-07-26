@@ -1,8 +1,11 @@
 package fit.wenchao.crypto_tools.exception
 
-import cn.hutool.json.JSONObject
+import com.alibaba.fastjson.JSONObject
 import fit.wenchao.crypto_tools.utils.ClassUtils
 import mu.KotlinLogging
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.http.converter.HttpMessageNotReadableException
 import org.springframework.validation.BindException
 import org.springframework.validation.BindingResult
@@ -18,87 +21,101 @@ import javax.servlet.http.HttpServletResponse
 import javax.validation.ConstraintViolationException
 import javax.validation.Path
 
-
-class BackendException : RuntimeException {
-    var data: Any?
-    var code: String
-    var msg: String
-
-    constructor(data: Any?, msg: String, code: String) {
-        this.data = data
-        this.code = code
-        this.msg = msg
-    }
-
-    constructor(data: Any?, respCode: RespCode) {
-        this.data = data
-        this.code = respCode.getCode()
-        msg = respCode.msg
-    }
-
-    constructor(cause: Throwable?, data: Any?, respCode: RespCode) : super(cause) {
-        this.data = data
-        this.code = respCode.getCode()
-        msg = respCode.msg
-    }
+enum class ErrorCode {
+    UNKNOWN,
+    SUCCESS,
+    INVALID_PARAMETER,
+    UPLOAD_FILE_SIZE_EXCEED_UPPER_LIMIT,
+    SERVER_ERROR,
+    KEY_NOT_EXISTS
 }
 
-
-class ParameterCheckResult {
-    var paramCheckMap: JSONObject = JSONObject()
-    fun putResult(field: String?, message: String?) {
-        paramCheckMap.put(field, message)
-    }
-}
 
 /**
  * 全局异常处理类
  */
 @ControllerAdvice
-open class GlobalExceptionHandler {
+class GlobalExceptionHandler {
+
     private val log = KotlinLogging.logger {}
 
-    /**
-     * 统一处理错误返回值
-     */
-    @ExceptionHandler(BackendException::class)
-    @ResponseBody
-    fun errorCodeException(req: HttpServletResponse?, ex: BackendException): JsonResult {
-        val msg: String = ex.msg
-        val jsonResult = JsonResult().apply {
-            this.data = ex.data
-            this.code = ex.code
-            this.msg = ex.msg
+
+    class ParameterCheckResult {
+        var paramCheckMap: JSONObject = JSONObject()
+        fun putResult(field: String, message: String?) {
+            paramCheckMap.put(field, message)
         }
-        log.error("[{}] {}", ex.code, msg)
-        return jsonResult
     }
 
+    class ApiException : RuntimeException {
+        var httpStatus: HttpStatus
+        var msg: Any?
+
+        constructor(httpStatus: HttpStatus, msg: Any?) {
+            this.httpStatus = httpStatus
+            this.msg = msg
+        }
+
+        constructor(message: String?, httpStatus: HttpStatus, msg: Any?) : super(message) {
+            this.httpStatus = httpStatus
+            this.msg = msg
+        }
+
+        constructor(message: String?, cause: Throwable?, httpStatus: HttpStatus, msg: Any?) : super(message, cause) {
+            this.httpStatus = httpStatus
+            this.msg = msg
+        }
+
+        override fun toString(): String {
+            return "ApiException{" +
+                    "httpStatus=" + httpStatus +
+                    ", msg=" + msg +
+                    '}'
+        }
+    }
+
+    // @Value("\${spring.servlet.multipart.max-file-size}")
+    var uploadLimit: String? = null
+
+    // region: error code handler
+    @ExceptionHandler(ApiException::class)
+    @ResponseBody
+    fun errorCodeException(req: HttpServletResponse, ex: ApiException): ResponseEntity<*> {
+       log.error("[{}] {}", ex.httpStatus, ex.msg)
+        return turnBackendExceptionIntoJsonResult(req, ex)
+    }
+
+    /**
+     * @param ex the exception
+     * @return the json result
+     */
+    private fun turnBackendExceptionIntoJsonResult(req: HttpServletResponse, ex: ApiException): ResponseEntity<*> {
+        return ResponseEntity<Any?>(JSONObject.toJSONString(ex.msg), ex.httpStatus)
+    }
+
+    // endregion
+    // region: validation error
     @ExceptionHandler(
         BindException::class,
         MethodArgumentNotValidException::class
     )
     @ResponseBody
-    fun paramValidateException(ex: Exception): JsonResult {
-        var bindingResult: BindingResult? = null
-        bindingResult = try {
-            ClassUtils.getFieldValue(ex, "bindingResult", BindingResult::class.java)
+    fun paramValidateException(ex: Exception?): JsonResult {
+        return try {
+            val bindingResult: BindingResult = ClassUtils.getFieldValue(ex!!, "bindingResult", BindingResult::class.java)
+                ?: return JsonResult(ErrorCode.INVALID_PARAMETER, null)
+            val parameterCheckResult = extractValidationErrorEntries(bindingResult)
+            val jsonResult = JsonResult(ErrorCode.INVALID_PARAMETER, parameterCheckResult)
+            log.error("Error:{}", jsonResult)
+            jsonResult
         } catch (e: NoSuchFieldException) {
-            log.error("获取参数校验信息失败")
-            return JsonResult.of(null, RespCode.FRONT_END_PARAMS_ERROR)
+            JsonResult(ErrorCode.INVALID_PARAMETER, null)
         }
-        val parameterCheckResult: ParameterCheckResult = bindingResultPackager(bindingResult)
-        val jsonResult: JsonResult = JsonResult.of(parameterCheckResult, RespCode.FRONT_END_PARAMS_ERROR)
-        log.error("Error:{}", jsonResult)
-        return jsonResult
     }
 
-    /**
-     * 统一处理参数校验异常
-     */
     @ExceptionHandler(ConstraintViolationException::class)
     @ResponseBody
-    fun constraintViolationException(ex: ConstraintViolationException): JsonResult {
+    fun constraintViolationException(ex: ConstraintViolationException): ResponseEntity<*> {
         val constraintViolations = ex.constraintViolations
         val parameterCheckResult = ParameterCheckResult()
         for (constraintViolation in constraintViolations) {
@@ -107,68 +124,62 @@ open class GlobalExceptionHandler {
                 constraintViolation.message
             )
         }
-        return JsonResult.of(parameterCheckResult, RespCode.FRONT_END_PARAMS_ERROR)
+        return ResponseEntity<Any?>(parameterCheckResult, HttpStatus.BAD_REQUEST)
     }
 
-    private fun bindingResultPackager(bindingResult: BindingResult?): ParameterCheckResult {
+    private fun extractValidationErrorEntries(bindingResult: BindingResult): ParameterCheckResult {
         val parameterCheckResult = ParameterCheckResult()
-        for (objectError in bindingResult!!.allErrors) {
+        for (objectError in bindingResult.allErrors) {
             val fieldError = objectError as FieldError
             parameterCheckResult.putResult(fieldError.field, fieldError.defaultMessage)
         }
         return parameterCheckResult
     }
 
-    // @Value("\${spring.servlet.multipart.max-file-size}")
-    var uploadLimit: String? = null
-
-    /**
-     * 统一处理其他后端异常
-     */
+    // endregion
+    // region: other exception
     @ExceptionHandler(Exception::class)
     @ResponseBody
-    fun otherException(req: HttpServletResponse?, ex: Exception): JsonResult {
+    fun otherException(req: HttpServletResponse, ex: Exception): ResponseEntity<*> {
         log.error(
-            "Server Exception-Name:{}，Server Exception-Msg:{}", ex.javaClass
-                .typeName, ex.message
+            "Server Exception-Name:{}，Server Exception-Msg:{}",
+            ex.javaClass.typeName,
+            ex.message
         )
         if (ex is HttpMessageNotReadableException) {
-            return errorCodeException(req, BackendException("JSON parse error", RespCode.FRONT_END_PARAMS_ERROR))
+            return turnBackendExceptionIntoJsonResult(
+                req,
+                ApiException(HttpStatus.BAD_REQUEST, "Request paramater is invalid")
+            )
         }
         if (ex is MissingServletRequestParameterException) {
-            return errorCodeException(
+            return turnBackendExceptionIntoJsonResult(
                 req,
-                BackendException("Required request body is missing", RespCode.FRONT_END_PARAMS_ERROR)
+                ApiException(HttpStatus.BAD_REQUEST, "Required request body is missing")
             )
         }
         if (ex is MaxUploadSizeExceededException) {
-            return errorCodeException(
-                req,
-                BackendException("Limitation: $uploadLimit", RespCode.UPLOAD_FILE_SIZE_EXCEED_UPPER_LIMIT)
+            return turnBackendExceptionIntoJsonResult(
+                req, ApiException(
+                    HttpStatus.PAYLOAD_TOO_LARGE,
+                    "Limitation: $uploadLimit"
+                )
             )
         }
         if (ex is MissingServletRequestPartException) {
-            return errorCodeException(req, BackendException(ex.message ?: "", RespCode.FRONT_END_PARAMS_ERROR))
+            return turnBackendExceptionIntoJsonResult(req, ApiException(HttpStatus.BAD_REQUEST, ex.message))
         }
         ex.printStackTrace()
-        val jsonResult = JsonResult().apply {
-            this.data = null
-            this.code = RespCode.SERVER_ERROR.getCode()
-            this.msg = "Server internal error occurred --> [ " + ex.javaClass
-                .typeName + "-->" + ex.message + " ]"
-        }
-        return jsonResult
-    }
+        return turnBackendExceptionIntoJsonResult(req, ApiException(HttpStatus.INTERNAL_SERVER_ERROR, ex.message))
+    } // endregion
 
     companion object {
         private fun getLastPathNode(path: Path): String {
             val wholePath = path.toString()
             val i = wholePath.lastIndexOf(".")
             return if (i != -1) {
-                wholePath.substring(i + 1, wholePath.length)
+                wholePath.substring(i + 1)
             } else wholePath
         }
     }
 }
-
-

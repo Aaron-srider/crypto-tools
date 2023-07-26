@@ -2,6 +2,12 @@
     <div class="hello">
         <h1>About</h1>
         <el-card>
+            base64 pub key
+            <el-input v-model="pubKeyInput" @input="onUserInputPubKeyInput">
+            </el-input>
+            <el-input type="textarea" readonly v-model="certResult"></el-input>
+        </el-card>
+        <el-card>
             <template #header></template>
 
             <el-select v-model="userInputMode">
@@ -47,6 +53,21 @@ import Client from "@/request/client";
 
 @Component
 export default class About extends Vue {
+
+    onUserInputPubKeyInput() {
+        if(this.pubKeyInput == null || this.pubKeyInput == "")     {
+            return
+        }
+        Client.cert(this.pubKeyInput).then(resp => {
+            this.certResult = resp.data
+        })
+    }
+
+
+
+
+    pubKeyInput: string | null = null
+    certResult: string | null = null
     userInputMode: string  = "auto"
     userInputType: string | null = null;
     userInput: string | null = null;

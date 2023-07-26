@@ -1,4 +1,4 @@
-package fit.wenchao.`crypto-tools`.exception
+package fit.wenchao.crypto_tools.exception
 
 enum class RespCode(
     private val code: String, val msg: String,

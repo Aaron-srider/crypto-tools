@@ -1,4 +1,4 @@
-package fit.wenchao.`crypto-tools`.utils
+package fit.wenchao.crypto_tools.utils
 
 import mu.KotlinLogging
 import org.springframework.web.method.HandlerMethod

@@ -1,0 +1,73 @@
+openapi: 3.0.3
+info:
+  title: crypto-tools
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8093/api
+
+#tags:
+
+#  - name: agent-key-command
+#    description: initiate command to kms by agent itself
+#
+#  - name: agent-key-management
+#    description: manage agent keys
+#
+#  - name: kms-key-management
+#    description: manage kms keys
+
+
+paths:
+  /cert:
+    get:
+      summary: wrap a public key with cert
+      parameters:
+        - name: pubKeyBase64
+          in: query
+          description: public key
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                type: string
+                description: base64 encoded cert
+        '400':
+          description: cert can not be generated
+          content:
+            application/json:
+              schema:
+                type: string
+                description: reason
+
+
+
+components:
+  schemas:
+    NotFoundErrorReason:
+      type: object
+      properties:
+        msg:
+          type: string
+
+    ImportCerts:
+      type: object
+      required:
+        - encCert
+        - signCert
+      properties:
+        encCert:
+          type: string
+          description: base64
+        signCert:
+          type: string
+          description: base64
+
+
+
+

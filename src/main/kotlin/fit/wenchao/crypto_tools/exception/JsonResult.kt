@@ -1,42 +1,38 @@
 package fit.wenchao.crypto_tools.exception
 
-
 class JsonResult {
-    var data: Any? = null
-    var code: String? = null
+    var code = ErrorCode.UNKNOWN.name
     var msg: String? = null
+    var data: Any? = null
+
+    constructor()
+    constructor(code: String, msg: String?, data: Any?) {
+        this.code = code
+        this.msg = msg
+        this.data = data
+    }
+
+    constructor(errorCode: ErrorCode, data: Any?) {
+        this.code = errorCode.name
+        msg = errorCode.name
+        this.data = data
+    }
+
+    override fun toString(): String {
+        return "JsonResult{" +
+                "code='" + code + '\'' +
+                ", msg='" + msg + '\'' +
+                ", data=" + data +
+                '}'
+    }
 
     companion object {
-        fun of(data: Any?, respCode: RespCode): JsonResult {
-            val jsonResult = JsonResult()
-            jsonResult.data = data
-            jsonResult.code = respCode.getCode()
-            jsonResult.msg = respCode.msg
-            return jsonResult
-        }
-
-        fun of(data: Any?, code: String?, msg: String?): JsonResult {
-            val jsonResult = JsonResult()
-            jsonResult.data = data
-            jsonResult.code = code
-            jsonResult.msg = msg
-            return jsonResult
-        }
-
         fun ok(): JsonResult {
-            return JsonResult().apply {
-                this.data = null
-                this.code = RespCode.SUCCESS.getCode()
-                this.msg = RespCode.SUCCESS.msg
-            }
+            return JsonResult(ErrorCode.SUCCESS.name, ErrorCode.SUCCESS.name, null)
         }
 
         fun ok(data: Any?): JsonResult {
-            return JsonResult().apply {
-                this.data = data
-                this.code = RespCode.SUCCESS.getCode()
-                this.msg = RespCode.SUCCESS.msg
-            }
+            return JsonResult(ErrorCode.SUCCESS.name, ErrorCode.SUCCESS.name, data)
         }
     }
 }

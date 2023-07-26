@@ -1,18 +1,38 @@
 package fit.wenchao.crypto_tools.rest
 
-import fit.wenchao.crypto_tools.exception.BackendException
-import fit.wenchao.crypto_tools.exception.RespCode
+import cn.hutool.core.date.DateField
+import cn.hutool.core.date.DateTime
+import cn.hutool.core.util.HexUtil
+import com.alibaba.fastjson.JSONObject
+import fit.wenchao.crypto_tools.CertUtil
+import fit.wenchao.crypto_tools.JavaSecureKeyPairToBytesConversionUtils
+import fit.wenchao.crypto_tools.Sm2Util
+import fit.wenchao.crypto_tools.exception.GlobalExceptionHandler
 import fit.wenchao.crypto_tools.utils.ByteDecodeException
 import fit.wenchao.crypto_tools.utils.ByteUtils
 import mu.KotlinLogging
+import org.bouncycastle.asn1.x500.X500Name
+import org.bouncycastle.asn1.x500.style.BCStyle
+import org.bouncycastle.cert.X509v3CertificateBuilder
+import org.bouncycastle.cert.jcajce.JcaX509CertificateConverter
+import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder
+import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder
+import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.validation.annotation.Validated
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 import java.io.UnsupportedEncodingException
+import java.math.BigInteger
 import java.net.URLDecoder
+import java.security.PrivateKey
+import java.security.PublicKey
+import java.security.cert.X509Certificate
 import java.util.*
+import javax.validation.Valid
 import javax.validation.constraints.NotEmpty
+import javax.validation.constraints.NotNull
 
 
 enum class InputType {
@@ -66,7 +86,7 @@ class Controller {
         try {
             userInputDecoded = URLDecoder.decode(userInput, "UTF-8")
         } catch (e: UnsupportedEncodingException) {
-            throw BackendException(null, RespCode.FRONT_END_PARAMS_ERROR)
+            throw GlobalExceptionHandler.ApiException(HttpStatus.BAD_REQUEST, "request param invalid")
         }
 
         var modeMap = mutableMapOf(
@@ -117,7 +137,7 @@ class Controller {
                 }
             }
         } catch (e: ByteDecodeException) {
-            throw BackendException(null, RespCode.INVALID_ENCODED_STRING)
+            throw GlobalExceptionHandler.ApiException(HttpStatus.BAD_REQUEST, "request param invalid")
         }
 
 
@@ -141,7 +161,82 @@ class Controller {
 
         return outputResult
     }
+
+
+    @GetMapping("/cert")
+    fun cert(@NotNull @Valid pubKeyBase64: String ): ResponseEntity<Any> {
+        var pubKey: ByteArray
+        try {
+            pubKey = Base64.getDecoder().decode(pubKeyBase64)
+        }catch (e: Exception) {
+            throw GlobalExceptionHandler.ApiException(HttpStatus.BAD_REQUEST, "must be base64")
+        }
+
+
+        val bytesToPublicKey = JavaSecureKeyPairToBytesConversionUtils.publickey(pubKey);
+
+        val generateKeyPair = Sm2Util.generateKeyPair()
+        val bytesToPrivateKey = JavaSecureKeyPairToBytesConversionUtils.privatekey(generateKeyPair.privateKey)
+
+
+        val begin = DateTime.now().toJdkDate()
+        val end = DateTime.now().offset(DateField.YEAR, 10).toJdkDate()
+        var encCert: ByteArray? = generateX509CertificateBytes(
+            bytesToPublicKey,
+            bytesToPrivateKey,
+            X500Name(BCStyle.INSTANCE, "o=ccm"),
+            X500Name(BCStyle.INSTANCE, "o=ccm"),
+            begin,
+            end
+        )
+
+        encCert?:return ResponseEntity(JSONObject.toJSONString("can not generate cert"), HttpStatus.BAD_REQUEST)
+
+        return ResponseEntity(JSONObject.toJSONString(HexUtil.encodeHex(encCert)), HttpStatus.OK);
+    }
 }
+
+fun generateX509CertificateBytes(
+    publicKey: PublicKey?,
+    privateKey: PrivateKey?,
+    subject: X500Name?,
+    issuer: X500Name?,
+    startDate: Date?,
+    endDate: Date?,
+): ByteArray {
+    return try {
+        generateX509Certificate(publicKey, privateKey, subject, issuer, startDate, endDate).encoded
+    } catch (e: java.lang.Exception) {
+        throw RuntimeException("Failed to generate X509 certificate", e)
+    }
+}
+
+fun generateX509Certificate(
+    publicKey: PublicKey?,
+    privateKey: PrivateKey?,
+    subject: X500Name?,
+    issuer: X500Name?,
+    startDate: Date?,
+    endDate: Date?,
+): X509Certificate {
+    return try {
+        val serial = BigInteger.valueOf(System.currentTimeMillis())
+        val certBuilder: X509v3CertificateBuilder =
+            JcaX509v3CertificateBuilder(issuer, serial, startDate, endDate, subject, publicKey)
+
+        // Sign the certificate using the private key
+        val contentSigner =
+            JcaContentSignerBuilder("SM3WITHSM2").setProvider("BC").build(privateKey)
+        val certHolder = certBuilder.build(contentSigner)
+
+        // Convert the certificate holder to X509Certificate
+        JcaX509CertificateConverter().setProvider("BC").getCertificate(certHolder)
+    } catch (e: java.lang.Exception) {
+        throw RuntimeException("Failed to generate X509 certificate", e)
+    }
+}
+
+
 
 fun traverseEach(input: String, action: (Byte) -> Unit) {
     val elements = input

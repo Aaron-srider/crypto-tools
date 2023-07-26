@@ -74,6 +74,16 @@ class Client {
             }
         });
     }
+
+    static cert(pubKeyInput: string) {
+        return request({
+            url: `/cert`,
+            method: 'get',
+            params: {
+                pubKeyBase64: pubKeyInput
+            }
+        });
+    }
 }
 
 export default Client;

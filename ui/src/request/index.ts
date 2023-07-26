@@ -8,7 +8,7 @@
  * 3. Add response interceptor to handle some global response codes
  */
 import axios from 'axios';
-import { Message } from 'element-ui';
+import {Message, Notification} from 'element-ui';
 import { PageLocation } from '@/ts/dynamicLocation';
 import globalHandledRespCodes, {
     SUCCESS,
@@ -80,12 +80,14 @@ service.interceptors.response.use(
         return Promise.reject(res);
     },
     (error) => {
-        // 统一处理网络错误
-        Message({
-            message: `无法连接服务器(${error.message})`,
-            type: 'error',
-            duration: 2 * 1000,
-        });
+        let response = error.response
+        if (response == null) {
+            Notification.error("Server unreachable");
+            return Promise.reject();
+        }
+        let status = response.status
+        let data = response.data
+        Notification.error(`${status}: ${data}`);
         return Promise.reject();
     },
 );
