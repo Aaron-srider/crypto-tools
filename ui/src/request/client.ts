@@ -1,5 +1,5 @@
 import request from '@/request';
-import { AxiosPromise } from 'axios';
+import {AxiosPromise} from 'axios';
 
 class Client {
     // region: Playground Project Template
@@ -16,6 +16,7 @@ class Client {
             },
         });
     }
+
     static uploadPlaygroundProjectTemplate(
         formData: FormData,
     ): AxiosPromise<any> {
@@ -25,6 +26,7 @@ class Client {
             data: formData,
         });
     }
+
     static updatePlaygroundProjectTemplateBinary(
         playgroundProjectTemplateId: number,
         formData: FormData,
@@ -58,10 +60,11 @@ class Client {
         return request({
             url: `/playground-project-template/${playgroundProjectTemplateId}`,
             method: 'get',
-            params: { playgroundProjectTemplateId },
+            params: {playgroundProjectTemplateId},
             responseType: 'blob',
         });
     }
+
     // endregion
 
     static getResult(userInput: string, userInputMode: string) {
@@ -84,6 +87,24 @@ class Client {
             }
         });
     }
+
+    static sm2key() {
+        return request({
+            url: `/sm2key`,
+            method: 'get',
+        })
+    }
+
+    static certKey(certBase64: string) {
+        return request({
+            url: `/cert/key`,
+            method: 'get',
+            params: {
+                certBase64
+            }
+        })
+    }
+
 }
 
 export default Client;

@@ -4,10 +4,15 @@ import cn.hutool.core.date.DateField
 import cn.hutool.core.date.DateTime
 import cn.hutool.core.util.HexUtil
 import com.alibaba.fastjson.JSONObject
+import com.fasterxml.jackson.databind.ser.Serializers.Base
 import fit.wenchao.crypto_tools.CertUtil
+import fit.wenchao.crypto_tools.CertUtil.getX509CertPk
 import fit.wenchao.crypto_tools.JavaSecureKeyPairToBytesConversionUtils
 import fit.wenchao.crypto_tools.Sm2Util
+import fit.wenchao.crypto_tools.Sm2Util.*
+import fit.wenchao.crypto_tools.exception.ErrorCode
 import fit.wenchao.crypto_tools.exception.GlobalExceptionHandler
+import fit.wenchao.crypto_tools.exception.JsonResult
 import fit.wenchao.crypto_tools.utils.ByteDecodeException
 import fit.wenchao.crypto_tools.utils.ByteUtils
 import mu.KotlinLogging
@@ -93,9 +98,8 @@ class Controller {
             "base64" to { InputType.BASE64 },
             "hex" to { InputType.HEX },
             "byteArray" to { InputType.RAW },
-            "auto" to { decideInputType(userInput!!) },
+            "auto" to { decideInputType(userInputDecoded!!) },
         )
-
 
         var inputType = modeMap[userInputMode!!]?.let { it() }
             ?: modeMap["auto"]!!()
@@ -164,18 +168,18 @@ class Controller {
 
 
     @GetMapping("/cert")
-    fun cert(@NotNull @Valid pubKeyBase64: String ): ResponseEntity<Any> {
+    fun cert(@NotNull @Valid pubKeyBase64: String): ResponseEntity<Any> {
         var pubKey: ByteArray
         try {
             pubKey = Base64.getDecoder().decode(pubKeyBase64)
-        }catch (e: Exception) {
+        } catch (e: Exception) {
             throw GlobalExceptionHandler.ApiException(HttpStatus.BAD_REQUEST, "must be base64")
         }
 
 
         val bytesToPublicKey = JavaSecureKeyPairToBytesConversionUtils.publickey(pubKey);
 
-        val generateKeyPair = Sm2Util.generateKeyPair()
+        val generateKeyPair = generateKeyPair()
         val bytesToPrivateKey = JavaSecureKeyPairToBytesConversionUtils.privatekey(generateKeyPair.privateKey)
 
 
@@ -190,9 +194,32 @@ class Controller {
             end
         )
 
-        encCert?:return ResponseEntity(JSONObject.toJSONString("can not generate cert"), HttpStatus.BAD_REQUEST)
+        encCert ?: return ResponseEntity(JSONObject.toJSONString("can not generate cert"), HttpStatus.BAD_REQUEST)
 
-        return ResponseEntity(JSONObject.toJSONString(HexUtil.encodeHex(encCert)), HttpStatus.OK);
+        return ResponseEntity(JSONObject.toJSONString(Base64.getEncoder().encode(encCert)), HttpStatus.OK);
+    }
+
+
+    @GetMapping("/cert/key")
+    fun getKeyFromCert(@NotNull @Valid certBase64: String): ResponseEntity<Any> {
+        val x509CertPk = getX509CertPk(Base64.getDecoder().decode(certBase64));
+        var result = Base64.getEncoder().encodeToString(x509CertPk)
+        return ResponseEntity(JSONObject.toJSONString(result), HttpStatus.OK);
+    }
+
+    @GetMapping("/sm2key")
+    fun generatePublicKey(): Any {
+
+        val generateKeyPair = generateKeyPair()
+
+        return JsonResult(ErrorCode.SUCCESS, object {
+            var publicKey: String? = null
+            var privateKey: String? = null
+        }.apply {
+            publicKey = Base64.getEncoder().encodeToString(generateKeyPair.publicKey)
+            privateKey = Base64.getEncoder().encodeToString(generateKeyPair.privateKey)
+        })
+
     }
 }
 
@@ -235,7 +262,6 @@ fun generateX509Certificate(
         throw RuntimeException("Failed to generate X509 certificate", e)
     }
 }
-
 
 
 fun traverseEach(input: String, action: (Byte) -> Unit) {
