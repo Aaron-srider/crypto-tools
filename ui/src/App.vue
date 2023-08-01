@@ -4,6 +4,8 @@
             <router-link to="/hello-world">HelloWorld</router-link>
             |
             <router-link to="/about">About</router-link>
+            |
+            <router-link to="/asn1">asn1</router-link>
         </nav>
         <router-view />
     </div>
