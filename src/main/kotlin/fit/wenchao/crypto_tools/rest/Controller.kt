@@ -196,7 +196,7 @@ class Controller {
 
         encCert ?: return ResponseEntity(JSONObject.toJSONString("can not generate cert"), HttpStatus.BAD_REQUEST)
 
-        return ResponseEntity(JSONObject.toJSONString(Base64.getEncoder().encode(encCert)), HttpStatus.OK);
+        return ResponseEntity(JSONObject.toJSONString(Base64.getEncoder().encodeToString(encCert)), HttpStatus.OK);
     }
 
 
@@ -206,6 +206,8 @@ class Controller {
         var result = Base64.getEncoder().encodeToString(x509CertPk)
         return ResponseEntity(JSONObject.toJSONString(result), HttpStatus.OK);
     }
+
+
 
     @GetMapping("/sm2key")
     fun generatePublicKey(): Any {
@@ -309,4 +311,11 @@ fun byteToString(byteValue: Byte): String {
         stringBuilder.append(lastBit)
     }
     return stringBuilder.reverse().toString()
+}
+
+fun main() {
+    var certBase64 = "TUlJQjZ6Q0NBWkNnQXdJQkFnSUdBWW83YkE5R01Bb0dDQ3FCSE05VkFZTjFNQTR4RERBS0JnTlZCQW9NQTJOamJUQWVGdzB5TXpBNE1qZ3dPVEUwTVRKYUZ3MHpNekE0TWpnd09URTBNVEphTUE0eEREQUtCZ05WQkFvTUEyTmpiVENDQVRNd2dld0dCeXFHU000OUFnRXdnZUFDQVFFd0xBWUhLb1pJemowQkFRSWhBUC8vLy83Ly8vLy8vLy8vLy8vLy8vLy8vLy8vQUFBQUFQLy8vLy8vLy8vL01FUUVJUC8vLy83Ly8vLy8vLy8vLy8vLy8vLy8vLy8vQUFBQUFQLy8vLy8vLy8vOEJDQW82ZnFlblo5ZU5FMWFua3ZQWlFtbjg1ZUo5UldyajVMZHZMMUJUWlFPa3dSQkJETEVyaXdmR1lFWlg1a0VSbW81eVpTUDR3dS84bVlMNFhGYVJZa3pUSFRIdkRjMm92VDJkNXhadmM3amEya2hVOUNwaDN6R0trZEFBdDh5NVNFNThLQUNJUUQvLy8vKy8vLy8vLy8vLy8vLy8vLy9jZ1BmYXlIR0JTdFR1L1FKT2RWQkl3SUJBUU5DQUFSc0JVa21FNVpaYWZPMkYrR0tPQm95blk2OXBZMTNiYzZNUEtyMTNjZ0RGQzVXM0ZISHA5N1BWTDN1dW1mWDNteWJGMnMwSy9lNXNNRitJM1NnYnI1eE1Bb0dDQ3FCSE05VkFZTjFBMGtBTUVZQ0lRQ081UDIrc2EwbjRHOHhCQ1RYMitsSG9VLzR6eTZKVVVTRGdGZzd2THlTVEFJaEFOclZFeDh6OTNqMkx1Z0Y1VVlxbGpnOG02V2NNRk8rZEl1b2p0ZUhwZVlp"
+    val x509CertPk = getX509CertPk(Base64.getDecoder().decode(certBase64));
+    var result = Base64.getEncoder().encodeToString(x509CertPk)
+    println(result)
 }
